@@ -3,47 +3,48 @@ name: Build Geode Mod
 on:
   workflow_dispatch:
 
-env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
-
 jobs:
   build:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+        - name: Windows
+          os: windows-latest
+          
+        - name: macOS
+          os: macos-latest
+
+        - name: Android32
+          os: ubuntu-latest
+          target: Android32
+
+        - name: Android64
+          os: ubuntu-latest
+          target: Android64
+
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install Geode CLI
-      run: brew install geode-sdk/geode/geode-cli
+      - name: Build the mod
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          combine: true
+          target: ${{ matrix.config.target }}
+      
+  package:
+    name: Package builds
+    runs-on: ubuntu-latest
+    needs: ['build']
 
-    - name: Install Geode SDK
-      run: |
-        mkdir -p $HOME/geode-sdk
-        curl -L https://api.geode-sdk.org/sdk/latest -o geode-sdk.zip
-        unzip geode-sdk.zip -d $HOME/geode-sdk
+    steps:
+      - uses: geode-sdk/build-geode-mod/combine@main
+        id: build
 
-    - name: Set Geode SDK Path
-      run: echo "GEODE_SDK=$HOME/geode-sdk" >> $GITHUB_ENV
-
-    - name: Build Geode Mod
-      run: geode build
-
-    - name: Find .geode file
-      id: find_geode
-      run: |
-        GEODE_FILE=$(find . -type f -name "*.geode" | head -n 1)
-        if [ -z "$GEODE_FILE" ]; then
-          echo "No .geode file found!"
-          exit 1
-        fi
-        echo "GEODE_FILE=$GEODE_FILE" >> $GITHUB_ENV
-        echo "Geode file found: $GEODE_FILE"
-
-    - name: Upload Geode Mod Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: Geode Mod
-        path: ${{ env.GEODE_FILE }}
-        if-no-files-found: error
+      - uses: actions/upload-artifact@v3
+        with:
+          name: Build Output
+          path: ${{ steps.build.outputs.build-output }}
